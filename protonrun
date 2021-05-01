@@ -1,0 +1,59 @@
+#!/usr/bin/env bash
+## Runs proton wine using a steam app's prefix
+##
+## Usage: protonrun APPID ARGS...
+## Usage: protonrun help
+
+set -eu
+shopt -s nullglob
+
+appid=${1:-none}
+steamapps="$HOME/.local/share/Steam/steamapps"
+
+# show all available proton APPIDs & names
+show_prefix_info() {
+  echo "Available APPIDs:" >&2
+  for file in "$steamapps"/compatdata/*; do
+    id=$(basename "$file")
+    if [ -f "$steamapps/appmanifest_$id.acf" ]; then
+      appname=$(grep -m1 \"name\" "$steamapps/appmanifest_$id.acf" | cut -d\" -f4)
+      echo "  $id: $appname" >&2
+    fi
+  done
+}
+
+# handle the appid arg
+if ! shift || ! [[ $appid =~ ^[0-9]+$ ]] ; then
+   echo "Usage: protonrun APPID ARGS..." >&2
+   if [[ $appid != *"help"* ]]; then
+     echo "Error: Missing/invalid APPID" >&2
+   fi
+   echo >&2
+   show_prefix_info
+   exit 1
+fi
+
+# setup the prefix
+export WINEPREFIX="$steamapps/compatdata/$appid/pfx"
+if [ ! -d "$WINEPREFIX" ]; then
+  echo "prefix not found at $WINEPREFIX" >&2
+  show_prefix_info
+  exit 2
+fi
+
+# try to use proton version referenced in prefix
+if [ -f "$WINEPREFIX/../version" ]; then
+  version=$(cut -d'-' -f1 "$WINEPREFIX/../version")
+  proton_dir="Proton $version"
+else
+  echo "Could not determine proton version for $appid" >&2
+  exit 3
+fi
+
+wine_bin="$steamapps/common/$proton_dir/dist/bin/wine"
+if [ ! -f "$wine_bin" ]; then
+  echo "proton/wine not found at $wine_bin" >&2
+  exit 4
+fi
+
+"$wine_bin" "$@"
